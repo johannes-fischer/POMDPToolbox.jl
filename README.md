@@ -3,7 +3,7 @@
 [![Coverage Status](https://coveralls.io/repos/github/JuliaPOMDP/POMDPToolbox.jl/badge.svg?)](https://coveralls.io/github/JuliaPOMDP/POMDPToolbox.jl?)
 
 Support tools for POMDPs.jl. This is a supported [JuliaPOMDP](https://github.com/JuliaPOMDP) package that provides tools
-for belief updating, problem modeling, and running simulations. 
+for belief updating, problem modeling, and running simulations.
 
 The most important tools in this package are the [simulators](#simulators). They can be used to easily run simulations of POMDP problems and policies.
 
@@ -27,6 +27,11 @@ Within each class directory, each file contains one tool. Each file should clear
 ### Beliefs
 #### [`discrete.jl`](src/beliefs/discrete.jl)
 Dense discrete probability distribution and updater.
+
+Create an updater with `DiscreteUpdater(pomdp)`; create a belief with `DiscreteBelief(pomdp, b)`, where `b` is a vector of probabilities; create a uniform belief with `uniform_belief(pomdp)`.
+
+States sampled from a `DiscreteBelief` will be actual states (of type `state_type(pomdp)`) instead of integer indices as in previous versions, and actual states instead of indices should be used in `pdf(b::DiscreteBelief, s)`. `DiscreteBelief` uses `state_index(pomdp, s)` to keep track of the states internally.
+
 #### [`particle.jl`](src/beliefs/particle.jl)
 Basic particle filter (deprecated; use [ParticleFilters.jl](https://github.com/JuliaPOMDP/ParticleFilters.jl))
 #### [`previous_observation.jl`](src/beliefs/previous_observation.jl)
@@ -35,6 +40,18 @@ Beliefs (and updaters) that only deal with the most recent observation
 - `PreviousObservationUpdater` maintains a "belief" that is a `Nullable{O}` where `O` is the observation type. The "belief" is null if there is no observation available, and contains the previous observation if there is one.
 - `FastPreviousObservationUpdater` just returns the previous observation when `update` is called. There is no mechanism for representing the case when an observation is not available.
 - `PrimedPreviousObservationUpdater` also returns the previous observation, but if an observation is not available, it returns a default.
+
+#### [`k_previous_observation.jl`](src/beliefs/k_previous_observation.jl)
+`KMarkovUpdater` maintains a "belief" that is a `Vector{O}` where `O` is the observation type. It consists of the last k observations where k is an integer to pass to the constructor of `KMarkovUpdater`. The last observation is at the end of the vector and the oldest one is at the beginning.
+Example:
+```julia
+up = KMarkovUpdater(5)
+s0 = initial_state(pomdp, rng)
+initial_observation = generate_o(pomdp, s0, rng)
+initial_obs_vec = fill(initial_observation, 5)
+hr = HistoryRecorder(rng=rng, max_steps=100)
+hist = simulate(hr, pomdp, policy, up, initial_obs_vec, s0)
+```
 
 #### [`void.jl`](src/beliefs/void.jl)
 An updater useful for when a belief is not necessary (i.e. for a random policy). `update` always returns `nothing`.
@@ -49,6 +66,8 @@ Provides some compatibility with [Distributions.jl](https://github.com/JuliaStat
 
 #### [`sparse_cat.jl`](src/distributions/sparse_cat.jl)
 Provides a sparse categorical distribution `SparseCat`. This distribution simply stores a vector of objects and a vector of their associated probabilities. It is optimized for value iteration with a fast implementation of `weighted_iterator`. Both `pdf` and `rand` are order n.
+
+Example: `SparseCat([1,2,3], [0.1,0.2,0.7])` is a categorical distribution that assignes probability 0.1 to `1`, 0.2 to `2`, 0.7 to `3`, and 0 to all other values.
 
 #### [`weighted_iteration.jl`](src/distributions/weighted_iteration.jl)
 Function for iterating through pairs of values and their probabilities in a distribution.
@@ -110,34 +129,49 @@ Tabular policies including the following:
 #### [`utility_wrapper.jl`](src/policies/utility_wrapper.jl)
 A wrapper for policies to collect statistics and handle errors.
 
-    `PolicyWrapper`
-    
+        PolicyWrapper
+
     Flexible utility wrapper for a policy designed for collecting statistics about planning.
-    
-    Carries a function, a policy, and a payload (that can be any type).
-    
-    The function should typically be defined with the do syntax, each time action is called on the wrapper, this function will be called with three arguments: the policy, the payload, and the current state or belief. The function should return an appropriate action. The idea is that, in this function, `action(policy, s)` should be called, statistics from the policy/planner should be collected and saved in the payload, exceptions can be handled, and the action should be returned.
-    
-    Example:
-    
+
+    Carries a function, a policy, and optionally a payload (that can be any type).
+
+    The function should typically be defined with the do syntax. Each time `action` is called on the wrapper, this function will be called.
+
+    If there is no payload, it will be called with two argments: the policy and the state/belief. If there is a payload, it will be called with three arguments: the policy, the payload, and the current state or belief. The function should return an appropriate action. The idea is that, in this function, `action(policy, s)` should be called, statistics from the policy/planner should be collected and saved in the payload, exceptions can be handled, and the action should be returned.
+
+    # Example
+
         using POMDPModels
         using POMDPToolbox
-    
+
         mdp = GridWorld()
         policy = RandomPolicy(mdp)
         counts = Dict(a=>0 for a in iterator(actions(mdp)))
-    
-        wrapper = PolicyWrapper(policy, payload=counts) do policy, counts, s
+
+        # with a payload
+        statswrapper = PolicyWrapper(policy, payload=counts) do policy, counts, s
             a = action(policy, s)
             counts[a] += 1
             return a
         end
-    
-        h = simulate(HistoryRecorder(max_steps=100), mdp, wrapper)
-        for (a, count) in wrapper.payload
+
+        h = simulate(HistoryRecorder(max_steps=100), mdp, statswrapper)
+        for (a, count) in payload(statswrapper)
             println("policy chose action \$a \$count of \$(n_steps(h)) times.")
         end
 
+        # without a payload
+        errwrapper = PolicyWrapper(policy) do policy, s
+            try
+                a = action(policy, s)
+            catch ex
+                warn("Caught error in policy; using default")
+                a = :left
+            end
+            return a
+        end
+
+        h = simulate(HistoryRecorder(max_steps=100), mdp, errwrapper)
 
 ### Simulators
 #### [`rollout.jl`](src/simulators/rollout.jl)

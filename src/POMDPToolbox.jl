@@ -10,6 +10,7 @@ import POMDPs: Simulator, simulate
 import POMDPs: action, value, solve
 import POMDPs: actions, action_index, state_index, obs_index, iterator, sampletype, states, n_actions, n_states, observations, n_observations, discount, isterminal
 import POMDPs: generate_sr, initial_state
+import POMDPs: implemented
 import Base: rand, rand!, mean, ==
 
 using ProgressMeter
@@ -33,10 +34,10 @@ export
 
 # beliefs
 export
-    VoidUpdater   
+    VoidUpdater
 include("beliefs/void.jl")
 
-export 
+export
     DiscreteBelief,
     DiscreteUpdater,
     uniform_belief,
@@ -51,6 +52,11 @@ export
 include("beliefs/previous_observation.jl")
 
 export
+    KMarkovUpdater
+
+include("beliefs/k_previous_observations.jl")
+
+export
     Particle,
     ParticleBelief,
     ParticleDistribution,
@@ -63,7 +69,9 @@ include("convenience/implementations.jl")
 
 # policies
 export
-    AlphaVectorPolicy
+    AlphaVectorPolicy,
+    belief_vector,
+    unnormalized_util
 include("policies/alpha_vector.jl")
 
 export
@@ -90,8 +98,9 @@ export
 include("policies/function.jl")
 
 export
-    PolicyWrapper
-include("policies/utility_wrapper.jl")    
+    PolicyWrapper,
+    payload
+include("policies/utility_wrapper.jl")
 
 # simulators
 export RolloutSimulator
@@ -135,7 +144,8 @@ include("simulators/stepthrough.jl")
 export
     Sim,
     run,
-    run_parallel
+    run_parallel,
+    problem
 include("simulators/parallel.jl")
 
 # model tools
@@ -159,8 +169,17 @@ include("model/ordered_spaces.jl")
 export GenerativeBeliefMDP
 include("model/generative_belief_mdp.jl")
 
+export FullyObservablePOMDP
+include("model/fully_observable_pomdp.jl")
+
+export UnderlyingMDP
+include("model/underlying_mdp.jl")
+
 # tools for distributions
 include("distributions/distributions_jl.jl")
+
+export obs_weight
+include("model/obs_weight.jl")
 
 export
     weighted_iterator
@@ -178,7 +197,7 @@ include("distributions/bool.jl")
 export test_solver
 include("testing/solver.jl")
 
-export 
+export
     probability_check,
     obs_prob_consistency_check,
     trans_prob_consistency_check

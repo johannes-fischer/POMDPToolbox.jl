@@ -9,28 +9,49 @@ The simulation will be terminated when either
 2) the discount factor is as small as `eps` or
 3) max_steps have been executed
 
-Keyword arguments are:
+Keyword Arguments:
+    - eps
+    - max_steps
 
+<<<<<<< HEAD
     initial_state
 
     eps
 
     max_steps
+=======
+Usage (optional arguments in brackets):
+    ro = RolloutSimulator()
+    history = simulate(ro, pomdp, policy, [updater [, init_belief [, init_state]]])
+>>>>>>> 4dac41f2cbdbeeb4e91d93f1b69bd000bce163b0
 """
 struct RolloutSimulator{RNG<:AbstractRNG} <: Simulator
     rng::RNG
 
     # optional: if these are null, they will be ignored
-    initial_state::Nullable{Any}
-    eps::Nullable{Float64}
     max_steps::Nullable{Int}
+    eps::Nullable{Float64}
+
+    # DEPRECATED: remove in v0.2.8 or higher
+    initial_state::Nullable{Any}
 end
-RolloutSimulator(rng::AbstractRNG) = RolloutSimulator(rng, Nullable{Any}(), Nullable{Float64}(), Nullable{Int}())
+
+# These are the only safe constructors to use
+RolloutSimulator(rng::AbstractRNG, d::Int=typemax(Int)) = RolloutSimulator(rng, Nullable{Int}(d), Nullable{Float64}(), Nullable{Any}())
 function RolloutSimulator(;rng=MersenneTwister(rand(UInt32)),
                            initial_state=Nullable{Any}(),
                            eps=Nullable{Float64}(),
                            max_steps=Nullable{Int}())
-    return RolloutSimulator{typeof(rng)}(rng, initial_state, eps, max_steps)
+    if !isnull(initial_state)
+        warn("The initial_state argument for RolloutSimulator is deprecated. The initial state should be specified as the last argument to simulate(...).")
+    end
+    return RolloutSimulator{typeof(rng)}(rng, max_steps, eps, initial_state)
+end
+
+# COMPATIBILITY CONSTRUCTOR: DO NOT USE!
+# Once version 0.2.7 is registered, start having this throw a warning in master
+function RolloutSimulator(rng::AbstractRNG, is::Nullable{Any}, eps::Nullable{Float64}, ms::Nullable{Int})
+    return RolloutSimulator(rng, ms, eps, is)
 end
 
 @POMDP_require simulate(sim::RolloutSimulator, pomdp::POMDP, policy::Policy) begin

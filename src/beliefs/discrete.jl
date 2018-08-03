@@ -16,7 +16,7 @@ struct DiscreteBelief{P<:POMDP, S}
     b::Vector{Float64}
 end
 
-function DiscreteBelief(pomdp, b::Vector{Float64}; check::Bool=true)
+function DiscreteBelief(pomdp::POMDP, state_list::AbstractVector, b::AbstractVector{Float64}, check::Bool=true)
     if check
         if !isapprox(sum(b), 1.0, atol=0.001)
             warn("""
@@ -33,7 +33,21 @@ function DiscreteBelief(pomdp, b::Vector{Float64}; check::Bool=true)
                  """)
         end
     end
-    return DiscreteBelief(pomdp, ordered_states(pomdp), b)
+    return DiscreteBelief(pomdp, state_list, b)
+end
+
+function DiscreteBelief(pomdp::POMDP, b::Vector{Float64}; check::Bool=true)
+    return DiscreteBelief(pomdp, ordered_states(pomdp), b, check)
+end
+
+function DiscreteBelief(pomdp::POMDP, b; check::Bool=true)
+    # convert b to a vector representation 
+    state_list = ordered_states(pomdp)
+    bv = Vector{Float64}(n_states(pomdp))
+    for (i, s) in enumerate(state_list)
+        bv[i] = pdf(b, s)
+    end
+    return DiscreteBelief(pomdp, state_list, bv, check)
 end
 
 
@@ -123,11 +137,13 @@ function update(bu::DiscreteUpdater, b::DiscreteBelief, a, o)
               Failed discrete belief update: new probabilities sum to zero.
               """)
     else
-        for i = 1:length(bp); bp[i] /= bp_sum; end
+        bp ./= bp_sum
     end
 
     return DiscreteBelief(pomdp, b.state_list, bp)
 end
+
+update(bu::DiscreteUpdater, b::Any, a, o) = update(bu, initialize_belief(bu, b), a, o)
 
 
 # DEPRECATED

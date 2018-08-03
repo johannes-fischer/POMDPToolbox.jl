@@ -13,10 +13,13 @@ Keyword Arguments:
     - `rng`: The random number generator for the simulation
     - `capture_exception::Bool`: whether to capture an exception and store it in the history, or let it go uncaught, potentially killing the script
     - `show_progress::Bool`: show a progress bar for the simulation
-    - `initial_state`
     - `eps`
     - `max_steps`
     - `sizehint::Int`: the expected length of the simulation (for preallocation)
+
+Usage (optional arguments in brackets):
+    hr = HistoryRecorder()
+    history = simulate(hr, pomdp, policy, [updater [, init_belief [, init_state]]])
 """
 mutable struct HistoryRecorder <: Simulator
     rng::AbstractRNG
@@ -26,12 +29,15 @@ mutable struct HistoryRecorder <: Simulator
     show_progress::Bool
 
     # optional: if these are null, they will be ignored
-    initial_state::Nullable{Any}
-    eps::Nullable{Any}
     max_steps::Nullable{Any}
+    eps::Nullable{Any}
     sizehint::Nullable{Integer}
+
+    # DEPRECATED
+    initial_state::Nullable{Any}
 end
 
+# This is the only stable constructor
 function HistoryRecorder(;rng=MersenneTwister(rand(UInt32)),
                           initial_state=Nullable{Any}(),
                           eps=Nullable{Any}(),
@@ -39,7 +45,10 @@ function HistoryRecorder(;rng=MersenneTwister(rand(UInt32)),
                           sizehint=Nullable{Integer}(),
                           capture_exception=false,
                           show_progress=false)
-    return HistoryRecorder(rng, capture_exception, show_progress, initial_state, eps, max_steps, sizehint)
+    if !isnull(initial_state)
+        warn("The initial_state argument for HistoryRecorder is deprecated. The initial state should be specified as the last argument to simulate(...).")
+    end
+    return HistoryRecorder(rng, capture_exception, show_progress, max_steps, eps, sizehint, initial_state)
 end
 
 @POMDP_require simulate(sim::HistoryRecorder, pomdp::POMDP, policy::Policy) begin
@@ -85,10 +94,6 @@ function simulate{S,A,O}(sim::HistoryRecorder,
                            initial_state::Any=get_initial_state(sim, initial_state_dist)
                           )
     initial_belief = initialize_belief(bu, initial_state_dist)
-    # use of deepcopy inspired from rollout.jl
-    if initial_belief === initial_state_dist
-        initial_belief = deepcopy(initial_belief)
-    end
     max_steps = get(sim.max_steps, typemax(Int))
     if !isnull(sim.eps)
         max_steps = min(max_steps, ceil(Int,log(get(sim.eps))/log(discount(pomdp))))
