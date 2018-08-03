@@ -67,7 +67,7 @@ function Sim(mdp::MDP,
             )
 
     if initial_state == nothing && state_type(mdp) != Void
-        is = POMDPs.initial_state(mdp, rng) 
+        is = POMDPs.initial_state(mdp, rng)
     else
         is = initial_state
     end
@@ -121,7 +121,7 @@ function run_parallel(process::Function, queue::AbstractVector;
     np = nprocs()
     if np == 1 && proc_warn
         warn("""
-             run_parallel(...) was started with only 1 process, so simulations will be run in serial. 
+             run_parallel(...) was started with only 1 process, so simulations will be run in serial.
 
              To supress this warning, use run_parallel(..., proc_warn=false).
 
@@ -135,7 +135,7 @@ function run_parallel(process::Function, queue::AbstractVector;
     frame_lines = Vector{Any}(n)
     nextidx() = (idx=i; i+=1; idx)
     prog_lock = ReentrantLock()
-    @sync begin 
+    @sync begin
         for p in 1:np
             if np == 1 || p != myid()
                 @async begin
@@ -145,9 +145,17 @@ function run_parallel(process::Function, queue::AbstractVector;
                             break
                         end
                         frame_lines[idx] = remotecall_fetch(p, queue[idx]) do sim
-                            result = simulate(sim)
-                            output = process(sim, result)
-                            append_metadata(output, sim.metadata)
+                            try
+                                result = simulate(sim)
+                                output = process(sim, result)
+                                append_metadata(output, sim.metadata)
+                            catch ex
+                                if ex isa InterruptException
+                                    rethrow(ex)
+                                else
+                                    println("  Caught $ex in Base.run()")
+                                end
+                            end
                         end
                         if progress isa Progress
                             lock(prog_lock)
@@ -185,10 +193,18 @@ function Base.run(process::Function, queue::AbstractVector; show_progress=true)
         end
     else
         for sim in queue
-            result = simulate(sim)
-            output = process(sim, result)
-            line = append_metadata(output, sim.metadata)
-            push!(lines, line)
+            try
+                result = simulate(sim)
+                output = process(sim, result)
+                line = append_metadata(output, sim.metadata)
+                push!(lines, line)
+            catch ex
+                if ex isa InterruptException
+                    rethrow(ex)
+                else
+                    println("Caught $ex in Base.run()")
+                end
+            end
         end
     end
     return create_dataframe(lines)

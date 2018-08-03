@@ -12,7 +12,7 @@ The simulation will be terminated when either
 Keyword arguments are:
 
     initial_state
-    
+
     eps
 
     max_steps
@@ -82,6 +82,9 @@ end
 end
 
 function simulate(sim::RolloutSimulator, pomdp::POMDP, policy::Policy, updater::Updater, initial_belief, s)
+    if isterminal(pomdp, s)
+        return 0.0
+    end
 
     eps = get(sim.eps, 0.0)
     max_steps = get(sim.max_steps, typemax(Int))
@@ -90,15 +93,20 @@ function simulate(sim::RolloutSimulator, pomdp::POMDP, policy::Policy, updater::
     r_total = 0.0
 
     b = initialize_belief(updater, initial_belief)
+    a = nothing
+    o = nothing
 
     step = 1
 
-    while disc > eps && !isterminal(pomdp, s) && step <= max_steps # TODO also check for terminal observation
+    while disc > eps && !isterminal(pomdp, s, a, o) && step <= max_steps # TODO also check for terminal observation
         a = action(policy, b)
 
         sp, o, r = generate_sor(pomdp, s, a, sim.rng)
 
         r_total += disc*r
+        # if isterminal(pomdp, sp, a, o)
+        #     break
+        # end
 
         s = sp
 
@@ -136,22 +144,29 @@ function simulate(sim::RolloutSimulator, mdp::MDP, policy::Policy)
 end
 
 function simulate{S}(sim::RolloutSimulator, mdp::Union{MDP{S}, POMDP{S}}, policy::Policy, initial_state::S)
+    if isterminal(pomdp, s)
+        return 0.0
+    end
 
     eps = get(sim.eps, 0.0)
     max_steps = get(sim.max_steps, typemax(Int))
 
     s = initial_state
+    a = nothing
 
     disc = 1.0
     r_total = 0.0
     step = 1
 
-    while disc > eps && !isterminal(mdp, s) && step <= max_steps
+    while disc > eps && !isterminal(mdp, s, a) && step <= max_steps
         a = action(policy, s)
 
         sp, r = generate_sr(mdp, s, a, sim.rng)
 
         r_total += disc*r
+        # if isterminal(mdp, sp, a)
+        #     break
+        # end
 
         s = sp
 

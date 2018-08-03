@@ -17,7 +17,7 @@ function simulate{S}(sim::StepSimulator, mdp::MDP{S}, policy::Policy, init_state
 end
 
 function simulate(sim::StepSimulator, pomdp::POMDP, policy::Policy, bu::Updater=updater(policy))
-    dist = initial_state_distribution(pomdp)    
+    dist = initial_state_distribution(pomdp)
     return simulate(sim, pomdp, policy, bu, dist)
 end
 
@@ -36,17 +36,17 @@ struct MDPSimIterator{SPEC, M<:MDP, P<:Policy, RNG<:AbstractRNG, S}
     max_steps::Int
 end
 
-function MDPSimIterator(spec::Union{Tuple, Symbol}, mdp::MDP, policy::Policy, rng::AbstractRNG, init_state, max_steps::Int) 
+function MDPSimIterator(spec::Union{Tuple, Symbol}, mdp::MDP, policy::Policy, rng::AbstractRNG, init_state, max_steps::Int)
     return MDPSimIterator{spec, typeof(mdp), typeof(policy), typeof(rng), typeof(init_state)}(mdp, policy, rng, init_state, max_steps)
 end
 
-Base.done{S}(it::MDPSimIterator, is::Tuple{Int, S}) = isterminal(it.mdp, is[2]) || is[1] > it.max_steps
-Base.start(it::MDPSimIterator) = (1, it.init_state)
-function Base.next{S}(it::MDPSimIterator, is::Tuple{Int, S})
+Base.done{S,A}(it::MDPSimIterator, is::Tuple{Int, S, A}) = (is[1] == 1 ? isterminal(it.pomdp, is[2]) : isterminal(it.pomdp, is[2:3]...)) || is[1] > it.max_steps
+Base.start(it::MDPSimIterator) = (1, it.init_state, nothing)
+function Base.next{S,A}(it::MDPSimIterator, is::Tuple{Int, S, A})
     s = is[2]
     a, ai = action_info(it.policy, s)
     sp, r, i = generate_sri(it.mdp, s, a, it.rng)
-    return (out_tuple(it, (s, a, r, sp, i, ai)), (is[1]+1, sp))
+    return (out_tuple(it, (s, a, r, sp, i, ai)), (is[1]+1, sp, a))
 end
 
 struct POMDPSimIterator{SPEC, M<:POMDP, P<:Policy, U<:Updater, RNG<:AbstractRNG, B, S}
@@ -58,7 +58,7 @@ struct POMDPSimIterator{SPEC, M<:POMDP, P<:Policy, U<:Updater, RNG<:AbstractRNG,
     init_state::S
     max_steps::Int
 end
-function POMDPSimIterator(spec::Union{Tuple,Symbol}, pomdp::POMDP, policy::Policy, up::Updater, rng::AbstractRNG, init_belief, init_state, max_steps::Int) 
+function POMDPSimIterator(spec::Union{Tuple,Symbol}, pomdp::POMDP, policy::Policy, up::Updater, rng::AbstractRNG, init_belief, init_state, max_steps::Int)
     return POMDPSimIterator{spec,
                             typeof(pomdp),
                             typeof(policy),
@@ -74,22 +74,22 @@ function POMDPSimIterator(spec::Union{Tuple,Symbol}, pomdp::POMDP, policy::Polic
                                                 max_steps)
 end
 
-Base.done{S,B}(it::POMDPSimIterator, is::Tuple{Int, S, B}) = isterminal(it.pomdp, is[2]) || is[1] > it.max_steps
-Base.start(it::POMDPSimIterator) = (1, it.init_state, it.init_belief)
-function Base.next{S,B}(it::POMDPSimIterator, is::Tuple{Int, S, B})
+Base.done{S,A,O,B}(it::POMDPSimIterator, is::Tuple{Int, S, A, O, B}) = (is[1] == 1 ? isterminal(it.pomdp, is[2]) : isterminal(it.pomdp, is[2:4]...)) || is[1] > it.max_steps
+Base.start(it::POMDPSimIterator) = (1, it.init_state, nothing, nothing, it.init_belief)
+function Base.next{S,A,O,B}(it::POMDPSimIterator, is::Tuple{Int, S, A, O, B})
     s = is[2]
-    b = is[3]
+    b = is[5]
     a, ai = action_info(it.policy, b)
     sp, o, r, i = generate_sori(it.pomdp, s, a, it.rng)
     bp, ui = update_info(it.updater, b, a, o)
-    return (out_tuple(it, (s, a, r, sp, i, ai, b, o, bp, ui)), (is[1]+1, sp, bp))
+    return (out_tuple(it, (s, a, r, sp, i, ai, b, o, bp, ui)), (is[1]+1, sp, a, o, bp))
 end
 
 # all is (s, a, r, sp, i, ai) for mdps, (s, a, r, sp, i, ai, b, o, bp) for POMDPs
 sym_to_ind = Dict(sym=>i for (i, sym) in enumerate([:s,:a,:r,:sp,:i,:ai,:b,:o,:bp,:ui]))
 
 @generated function out_tuple(it::Union{MDPSimIterator, POMDPSimIterator}, all::Tuple)
-    spec = it.parameters[1]     
+    spec = it.parameters[1]
     if isa(spec, Tuple)
         calls = []
         for sym in spec
@@ -145,7 +145,7 @@ convert_spec(spec::Symbol) = spec
     stepthrough(problem, policy, [spec])
     stepthrough(problem, policy, [spec], [rng=rng], [max_steps=max_steps], [initial_state=initial_state])
 
-Create a simulation iterator. This is intended to be used with for loop syntax to output the results of each step *as the simulation is being run*. 
+Create a simulation iterator. This is intended to be used with for loop syntax to output the results of each step *as the simulation is being run*.
 
 Example:
 
