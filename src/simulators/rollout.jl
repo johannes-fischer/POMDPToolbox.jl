@@ -165,7 +165,7 @@ function simulate(sim::RolloutSimulator, mdp::MDP, policy::Policy)
 end
 
 function simulate{S}(sim::RolloutSimulator, mdp::Union{MDP{S}, POMDP{S}}, policy::Policy, initial_state::S)
-    if isterminal(pomdp, s)
+    if isterminal(mdp, initial_state)
         return 0.0
     end
 
