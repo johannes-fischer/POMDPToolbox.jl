@@ -149,17 +149,9 @@ function run_parallel(process::Function, queue::AbstractVector;
                             break
                         end
                         frame_lines[idx] = remotecall_fetch(p, queue[idx]) do sim
-                            try
                                 result = simulate(sim)
                                 output = process(sim, result)
                                 append_metadata(output, sim.metadata)
-                            catch ex
-                                if ex isa InterruptException
-                                    rethrow(ex)
-                                else
-                                    println("  Caught $ex in Base.run()")
-                                end
-                            end
                         end
                         if progress isa Progress
                             lock(prog_lock)
